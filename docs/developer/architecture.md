@@ -61,9 +61,19 @@ database — all state is JSON files under `/data`.
    - `_handle_container_restart` — applies cooldown, backoff, and the restart threshold;
      restarts the container or quarantines it.
 
-   In parallel, `_event_listener_loop` subscribes to Docker's container-start events (via
-   a background thread feeding an asyncio queue) so containers labelled `autoheal=true`
-   are picked up the moment they start, without waiting for the next polling cycle.
+   The in-memory restart state (each container's last restart time, backoff delay, pending
+   restart wait and healthy run, the cycle count, and the streak of healthy checks that
+   releases a quarantined container) lives in `RecoveryPolicy` (`app/monitor/recovery.py`),
+   which also decides when a quarantined container is stable enough to release and resets
+   its backoff on release. It is synchronous and makes no Docker, configuration or
+   notification calls: the engine passes in the configuration it already read and keeps the
+   Docker calls, the persisted restart counts and quarantine, events, and notifications.
+
+   In parallel, `AutoDiscovery.listen` (`app/monitor/auto_discovery.py`) subscribes to
+   Docker's container-start events (via a background thread feeding an asyncio queue) so
+   containers labelled `autoheal=true` are picked up the moment they start, without waiting
+   for the next polling cycle. The startup scan and the handling of each start event live in
+   the same class. The engine owns the listener task and starts and stops it.
 
 3. **REST API** (`app/api/api.py`, routes in `app/api/routes/`): a FastAPI app exposing
    `/api/*` endpoints for containers, configuration, health checks, maintenance mode,
